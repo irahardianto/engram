@@ -1,0 +1,87 @@
+# ==============================================================================
+# Engram — Docker Compose (external SurrealDB topology)
+# ==============================================================================
+#   ENGRAM_SURREAL_PASS='<strong password>' \
+#     docker compose -f docker-compose.external.yml up -d
+#
+# Engram runs in external mode (ADR-03) against a separate SurrealDB container.
+# Use this when you already operate SurrealDB or want to upgrade it independently.
+# Do not run it at the same time as docker-compose.yml (both publish 8080).
+# ==============================================================================
+
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v3.3.4
+    container_name: engram-surrealdb
+    restart: unless-stopped
+    # Official image runs as nonroot (65532); the named volume handles permissions.
+    command: >
+      start --bind 0.0.0.0:8000
+      --user root --pass ${ENGRAM_SURREAL_PASS:?set ENGRAM_SURREAL_PASS}
+      rocksdb:///data/surreal
+    volumes:
+      - external-surreal-data:/data
+    # Not published to the host: only Engram talks to SurrealDB.
+    expose:
+      - "8000"
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "/surreal", "isready", "--endpoint", "http://127.0.0.1:8000"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  engram:
+    image: ghcr.io/irahardianto/engram:0.1.0
+    container_name: engram
+    restart: unless-stopped
+    user: "10001:10001"
+    depends_on:
+      surrealdb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      - ENGRAM_BIND=0.0.0.0:8080
+      - ENGRAM_SERVER_TIMEZONE=${ENGRAM_SERVER_TIMEZONE:-UTC}
+      - ENGRAM_DATA_DIR=/data
+      - ENGRAM_SURREAL_MODE=external
+      - ENGRAM_SURREAL_URL=http://surrealdb:8000
+      - ENGRAM_SURREAL_USER=root
+      - ENGRAM_SURREAL_PASS=${ENGRAM_SURREAL_PASS:?set ENGRAM_SURREAL_PASS}
+      - ENGRAM_EMBEDDING_PROVIDER=${ENGRAM_EMBEDDING_PROVIDER:-ollama}
+      - ENGRAM_EMBEDDING_BASE_URL=${ENGRAM_EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      - ENGRAM_EMBEDDING_MODEL=${ENGRAM_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - ENGRAM_EMBEDDING_DIMENSIONS=${ENGRAM_EMBEDDING_DIMENSIONS:-1024}
+      - ENGRAM_LLM_PROVIDER=${ENGRAM_LLM_PROVIDER:-ollama}
+      - ENGRAM_LLM_BASE_URL=${ENGRAM_LLM_BASE_URL:-http://host.docker.internal:11434}
+      - ENGRAM_LLM_MODEL=${ENGRAM_LLM_MODEL:-qwen3:8b}
+      - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - ENGRAM_TELEMETRY_LOG_FORMAT=json
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      # Holds /data/secrets (generated API key) even in external mode.
+      - engram-external-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/engram", "healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  external-surreal-data:
+    name: engram-external-surreal-data
+  engram-external-data:
+    name: engram-external-data

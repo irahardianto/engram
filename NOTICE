@@ -1,0 +1,31 @@
+Engram
+Copyright 2026 Ichsan Rahardianto and Engram Contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+========================================================================
+Third-Party Runtime Notice: SurrealDB Binary (All-in-One Container Image)
+========================================================================
+
+The Engram Rust binary (`engram`), Python Hermes plugin (`integrations/hermes/engram`),
+SurrealQL migrations (`migrations/`), and specification documentation (`docs/`) are
+pure permissive open-source software (Apache-2.0) and do NOT link against any
+Business Source License (BSL-1.1) crates. As documented in `docs/spec/00-decisions.md`
+(ADR-02 and ADR-16), `engram` communicates with SurrealDB exclusively over a clean-room
+HTTP CBOR RPC client (`reqwest` + `ciborium`).
+
+When distributed as the all-in-one container image (`Dockerfile`), the container image
+bundles the unmodified official `surreal` server binary from `surrealdb/surrealdb:v3.3.4`,
+which is licensed by SurrealDB Ltd under the Business Source License 1.1 (BSL-1.1).
+
+Under SurrealDB's BSL-1.1 Additional Use Grant:
+  - Production use of the unmodified `surreal` binary is permitted, provided the combined
+    work is not offered to third parties as a hosted or managed Database-as-a-Service
+    (DBaaS) that competes with SurrealDB Cloud.
+  - Each release version of SurrealDB automatically converts from BSL-1.1 to the
+    Apache License 2.0 on the fourth anniversary of its initial release date.
+  - Full license text: https://surrealdb.com/license
+
+Users who require a container image containing zero BSL-1.1 binaries may run `engram`
+with `ENGRAM_SURREAL_MODE=external` against an externally managed SurrealDB instance
+(see `docker-compose.external.yml` and `docs/spec/08-deployment-operations.md`).

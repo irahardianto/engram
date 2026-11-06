@@ -1,0 +1,31 @@
+# Reference clones used during discovery & verification (never committed)
+.refs/
+
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Runtime data, secrets, and local volumes
+/data/
+.env
+.env.*
+!.env.example
+*.surql.bak
+
+# Python / Hermes plugin cache & virtualenvs
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS & editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/

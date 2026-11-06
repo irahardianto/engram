@@ -1,0 +1,89 @@
+# ==============================================================================
+# Engram — Docker Compose (all-in-one, the default and recommended topology)
+# ==============================================================================
+#   docker compose up -d                         # Engram (+ managed SurrealDB inside)
+#   docker compose --profile with-ollama up -d   # ...plus a local Ollama container
+#
+# The external-SurrealDB topology lives in docker-compose.external.yml so that a
+# bare `docker compose up -d` always starts exactly one working Engram.
+# See docs/spec/08-deployment-operations.md.
+# ==============================================================================
+
+services:
+  engram:
+    image: ghcr.io/irahardianto/engram:0.1.0
+    container_name: engram
+    restart: unless-stopped
+    user: "10001:10001"
+    ports:
+      # REST + MCP on loopback only (ADR-14). Use a reverse proxy for remote access.
+      - "127.0.0.1:8080:8080"
+    environment:
+      - ENGRAM_BIND=0.0.0.0:8080
+      - ENGRAM_SERVER_TIMEZONE=${ENGRAM_SERVER_TIMEZONE:-UTC}
+      - ENGRAM_DATA_DIR=/data
+      - ENGRAM_SURREAL_MODE=managed
+      - ENGRAM_SURREAL_ENGINE=rocksdb
+      - ENGRAM_EMBEDDING_PROVIDER=${ENGRAM_EMBEDDING_PROVIDER:-ollama}
+      - ENGRAM_EMBEDDING_BASE_URL=${ENGRAM_EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      - ENGRAM_EMBEDDING_MODEL=${ENGRAM_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
+      - ENGRAM_EMBEDDING_DIMENSIONS=${ENGRAM_EMBEDDING_DIMENSIONS:-1024}
+      - ENGRAM_LLM_PROVIDER=${ENGRAM_LLM_PROVIDER:-ollama}
+      - ENGRAM_LLM_BASE_URL=${ENGRAM_LLM_BASE_URL:-http://host.docker.internal:11434}
+      - ENGRAM_LLM_MODEL=${ENGRAM_LLM_MODEL:-qwen3:8b}
+      # Optional secrets; leave unset to auto-generate the API key on first boot.
+      - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
+      - ENGRAM_EMBEDDING_API_KEY=${ENGRAM_EMBEDDING_API_KEY:-}
+      - ENGRAM_LLM_API_KEY=${ENGRAM_LLM_API_KEY:-}
+      # OTLP traces are compiled into the image but only active when this is set.
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - ENGRAM_TELEMETRY_LOG_FORMAT=json
+      - RUST_LOG=${RUST_LOG:-info}
+    volumes:
+      - engram-data:/data
+    extra_hosts:
+      # Lets the container reach Ollama on the host (Linux needs host-gateway).
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    # Ordered shutdown needs up to ~35 s (ADR-03).
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/engram", "healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Optional local model server. With this profile, point Engram at it:
+  #   ENGRAM_EMBEDDING_BASE_URL=http://ollama:11434 ENGRAM_LLM_BASE_URL=http://ollama:11434
+  ollama:
+    image: ollama/ollama:latest
+    container_name: engram-ollama
+    restart: unless-stopped
+    profiles:
+      - with-ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    volumes:
+      - ollama-models:/root/.ollama
+    # For NVIDIA GPUs, uncomment:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  engram-data:
+    name: engram-data
+  ollama-models:
+    name: engram-ollama-models
